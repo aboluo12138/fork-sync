@@ -28,8 +28,8 @@ jobs:
       # 🔄 第三步：合并上游代码到你的 main 分支
       - name: Merge upstream
         run: |
-          git checkout main
-          git merge upstream/main --allow-unrelated-histories -m "sync upstream"
+          git checkout master
+          git merge upstream/master --allow-unrelated-histories -m "sync upstream"
           # --allow-unrelated-histories：防止历史不一致时报错（第一次同步常用）
 
       # 🧹 第四步：删除上游带来的 workflow（防止污染你的 Actions）
