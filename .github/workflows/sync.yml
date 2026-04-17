@@ -1,63 +1,60 @@
-name: Sync fork-sync  # workflow 名字（随便起）
+name: Fork Sync  # workflow 名称（随便改）
 
 on:
   schedule:
-    - cron: "0 */24 * * *"   # 定时任务：每6小时执行一次
-  workflow_dispatch:        # 允许你在 GitHub 页面手动点击运行
+    - cron: "0 */24 * * *"   # ⏰ 每24小时自动运行一次
+  workflow_dispatch:        # ▶️ 支持在 GitHub 页面手动点击运行
 
 permissions:
-  contents: write           # 给 workflow 写仓库的权限（否则 push 会失败）
+  contents: write           # 🔑 关键！允许 Actions 往仓库 push（解决403问题）
 
 jobs:
   sync:
-    runs-on: ubuntu-latest  # 使用 GitHub 提供的 Linux 环境
+    runs-on: ubuntu-latest  # 🖥️ 使用 Ubuntu 运行环境
 
     steps:
-      # 第一步：拉取你当前仓库代码
-      - name: Checkout 当前仓库
+      # 📥 第一步：拉取你自己的仓库代码
+      - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0    # 拉完整历史（否则 merge 会出问题）
+          fetch-depth: 0    # 拉完整历史（否则无法 merge）
 
-      # 第二步：配置 Git 用户（否则提交会失败）
-      - name: 配置 Git
+      # 🔗 第二步：添加上游仓库（upstream）
+      - name: Add upstream
+        run: |
+          git remote add upstream https://github.com/tgymnich/fork-sync.git  # ❗改成你的上游仓库
+          git fetch upstream  # 拉取上游最新代码
+
+      # 🔄 第三步：合并上游代码到你的 main 分支
+      - name: Merge upstream
+        run: |
+          git checkout main
+          git merge upstream/main --allow-unrelated-histories -m "sync upstream"
+          # --allow-unrelated-histories：防止历史不一致时报错（第一次同步常用）
+
+      # 🧹 第四步：删除上游带来的 workflow（防止污染你的 Actions）
+      - name: Remove upstream workflows
+        run: |
+          rm -rf .github/workflows/*
+          # ⚠️ 这一步会删除所有 workflow（包括你自己的！）
+
+      # ✅ 第五步（推荐）：只保留你自己的 sync.yml（白名单）
+      - name: Keep only sync.yml
+        run: |
+          mkdir -p .github/workflows
+          git checkout HEAD@{1} -- .github/workflows/sync.yml || true
+          # 从上一次提交中恢复 sync.yml，避免被删除
+
+      # 📝 第六步：提交更改
+      - name: Commit changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "sync upstream" || echo "No changes"
+          # 如果没有变化，避免报错
 
-      # 第三步：同步逻辑（核心）
-      - name: 同步 upstream
+      # 🚀 第七步：推送回你的仓库
+      - name: Push
         run: |
-          set -e  # 任意命令报错就停止
-
-          # 自动获取当前仓库默认分支（main / master 自动识别）
-          BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
-          echo "当前分支: $BRANCH"
-
-          # 删除旧的 upstream（避免重复添加时报错）
-          git remote remove upstream || true
-
-          # 添加上游仓库（原作者仓库）
-          git remote add upstream https://github.com/tgymnich/fork-sync
-
-          # 拉取上游更新
-          git fetch upstream
-
-          # 切换到当前分支
-          git checkout $BRANCH
-
-          # 尝试合并上游代码
-          if git merge upstream/$BRANCH --no-edit; then
-            echo "✅ merge 成功（无冲突）"
-          else
-            echo "⚠️ 检测到冲突，使用 upstream 强制覆盖"
-
-            # 放弃 merge
-            git merge --abort || true
-
-            # 强制用上游代码覆盖本地
-            git reset --hard upstream/$BRANCH
-          fi
-
-          # 推送到你自己的 GitHub 仓库
-          git push origin $BRANCH
+          git push origin main
