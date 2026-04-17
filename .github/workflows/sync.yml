@@ -1,0 +1,63 @@
+name: Sync fork-sync  # workflow 名字（随便起）
+
+on:
+  schedule:
+    - cron: "0 */24 * * *"   # 定时任务：每6小时执行一次
+  workflow_dispatch:        # 允许你在 GitHub 页面手动点击运行
+
+permissions:
+  contents: write           # 给 workflow 写仓库的权限（否则 push 会失败）
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest  # 使用 GitHub 提供的 Linux 环境
+
+    steps:
+      # 第一步：拉取你当前仓库代码
+      - name: Checkout 当前仓库
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # 拉完整历史（否则 merge 会出问题）
+
+      # 第二步：配置 Git 用户（否则提交会失败）
+      - name: 配置 Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # 第三步：同步逻辑（核心）
+      - name: 同步 upstream
+        run: |
+          set -e  # 任意命令报错就停止
+
+          # 自动获取当前仓库默认分支（main / master 自动识别）
+          BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
+          echo "当前分支: $BRANCH"
+
+          # 删除旧的 upstream（避免重复添加时报错）
+          git remote remove upstream || true
+
+          # 添加上游仓库（原作者仓库）
+          git remote add upstream https://github.com/tgymnich/fork-sync
+
+          # 拉取上游更新
+          git fetch upstream
+
+          # 切换到当前分支
+          git checkout $BRANCH
+
+          # 尝试合并上游代码
+          if git merge upstream/$BRANCH --no-edit; then
+            echo "✅ merge 成功（无冲突）"
+          else
+            echo "⚠️ 检测到冲突，使用 upstream 强制覆盖"
+
+            # 放弃 merge
+            git merge --abort || true
+
+            # 强制用上游代码覆盖本地
+            git reset --hard upstream/$BRANCH
+          fi
+
+          # 推送到你自己的 GitHub 仓库
+          git push origin $BRANCH
