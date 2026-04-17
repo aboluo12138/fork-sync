@@ -57,4 +57,4 @@ jobs:
       # 🚀 第七步：推送回你的仓库
       - name: Push
         run: |
-          git push origin main
+          git push origin master
